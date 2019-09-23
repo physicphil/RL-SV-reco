@@ -1,7 +1,8 @@
 """
 Assemble a vertex based on quality and from a list of coordinates.
-Classes?
 Return rewards?
+
+Pseudocode at the moment, the actual layout of the jet data is needed next
 """   
         
 class Poca(object):
@@ -145,6 +146,7 @@ class TrackEnvironment(object):
         """
         self.has_sv = jet.sv_flag
         # how to apply pt cut?
+        # also include nPixelHits, theta for learning etc.
         self.track_data = torch.tensor(jet) # with a gather or where? # padding
         self.state = self.track_data # add a dimension or column with 0
         self.vertex = VertexCandidate(0)
