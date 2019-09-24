@@ -2,7 +2,8 @@
 Assemble a vertex based on quality and from a list of coordinates.
 Return rewards?
 
-Pseudocode at the moment, the actual layout of the jet data is needed next
+Pseudocode at the moment, the actual layout of the jet data is needed next.
+Imagine track index is enough as an argument, set up functions acordingly.
 """   
         
 class Poca(object):
@@ -13,10 +14,10 @@ class Poca(object):
     """
     def __init__(self, i, t, j):
         #Vertex computation here
-        self.x = helix(t, i)
-        self.track = i
-        self.next_to = j
-        self.weight = 1
+        self.x = helix(t, i) # point in space (numpy)
+        self.track = i # track index of poca
+        self.next_to = j # next to this track
+        self.weight = 1 # weigth determined by uncertainty
 
 
 class VertexCandidate(object):
@@ -34,12 +35,19 @@ class VertexCandidate(object):
         """ Initialises the vertex object with one track
         
         No position is initially returned.
+        Has 5 attributes and 3 methods.
+        Atrr:
+        .track_indices indices of added tracks (list)
+        .vertex vertex position numpy array)
+        .uncertainty
+        .num_steps, the number of steps taken
+        .pocas list of Poca objects
         """
-        self.track_indices = [track]
-        self.vertex = None
-        self.uncertainty = None
-        self.num_steps = 0
-        self.pocas = []
+        self.track_indices = [track] # list of track indices
+        self.vertex = None # 3d coordinates of vertex
+        self.uncertainty = None # measure of spread of pocas
+        self.num_steps = 0 # how many steps have been done by the agent
+        self.pocas = [] # list of Poca objectsS
         
     def add_track(self, i):
         """Adds a track to the vertex candidate.
@@ -171,6 +179,7 @@ class TrackEnvironment(object):
             dflag = True
         else:
             print("Choose a proper action")
+        #      next state  reward   reward  reward   penalty  done
         return self.state, vertex , uncer, numsteps, pflag, dflag
         
 
