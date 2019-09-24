@@ -31,8 +31,8 @@ def helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
 def isinbarrel(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
     """Checks if a point on defined helix is still in the pixel barrel.
 
-    Uses CMS coordinates and primary vertex coordinates to determine if point
-    parametrized by t and helix parameters is inside pixel barrel.
+    Uses CMS coordinates and primary vertex coordinates to determine if
+    point parametrized by t and helix parameters is inside pixel barrel.
     """
 
     x = helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
@@ -43,19 +43,20 @@ def isinbarrel(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
 def pointdistance(stepwidth, phi, eta, q, pt, dxy, dz):
     """Returns space stepwidth for points after one running parameter step.
 
-    Returns the distance of neighbouring points on one helix given the helix
-    parameters and a running parameter stepwidth.
+    Returns the distance of neighbouring points on one helix given the
+    helix parameters and a running parameter stepwidth.
     """
 
     return LA.norm(helix(0, phi, eta, q, pt, dxy, dz, 0, 0, 0)
-                   - helix(stepwidth, phi, eta, q, pt, dxy, dz, 0, 0, 0))
+                  - helix(stepwidth, phi, eta, q, pt, dxy, dz, 0, 0, 0))
 
 
 def optstepwidth(pdis, phi, eta, q, pt, dxy, dz):
-    """Returns a helix running paramter to get a resultion of at least pdis.
+    """Returns a helix running paramter for a resultion of pdis.
 
-    As long as the current stepwidth results in a too large separation of
-    neighbouring points, the running parameter step is reduced by some factor.
+    As long as the current stepwidth results in a too large separation
+    of neighbouring points, the running parameter step is reduced by
+    some factor.
     """
 
     stepwidth = 1.0
@@ -71,10 +72,7 @@ def optstepwidth(pdis, phi, eta, q, pt, dxy, dz):
 
 
 def scanrange(stepwidth, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
-    """Returns range as touple to scan the whole barrel at a given stepwidth.
-
-    If too many steps are required to leave pixel barrel, reset something.
-    Still needs to be implemented.
+    """Returns range as touple to scan the whole barrel at stepwidth.
     """
 
     t0 = 0.0
@@ -93,12 +91,14 @@ def scanrange(stepwidth, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
     return (t1, t0)
 
 
-def uncertainty_xyz(t, phi, eta, q, pt, dxy, dz, dphi, deta, dpt, ddxy, ddz):
+def uncertainty_xyz(t, phi, eta, q, pt, dxy, dz,
+                    dphi, deta, dpt, ddxy, ddz):
     """Returns a vector with uncertainties for a given point on a helix.
 
     Uncertainties from parametrisation of the helix propagate into the
-    sampling of the helix. Uncertainties from helix parameters are input,
-    uncertainty in x, y, z are output with gaussian error propagation.
+    sampling of the helix. Uncertainties from helix parameters are
+    input, uncertainty in x, y, z are output with gaussian error
+    propagation.
     """
 
     x = dphi * ((- q * dxy + r * pt * q) * np.cos(phi)\
@@ -109,7 +109,8 @@ def uncertainty_xyz(t, phi, eta, q, pt, dxy, dz, dphi, deta, dpt, ddxy, ddz):
 
     y = dphi * ((- q * dxy + r * pt * q) * np.sin(phi)\
     + r * pt * np.cos(-q * t + phi + q * 0.5 * np.pi))\
-    + dpt * (-q * np.cos(phi) * r + r * np.sin(-q*t + phi + q * 0.5 * np.pi))\
+    + dpt * (-q * np.cos(phi) * r + \
+    r * np.sin(-q*t + phi + q * 0.5 * np.pi))\
     + ddxy * q * np.cos(phi)
 
     z = deta *(1/np.sin(2*np.arctan(np.exp(-eta))))**2\
@@ -123,13 +124,13 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
                   phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0,
                   phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1,
                   counter,jentry):
-    """Returns running parameters of helices to get to their POCA and distance.
+    """Returns running parameters to get helices POCAs and distance.
 
-    Helices running parameter space is sampled within tstart and tend with
-    stepwidth tstepwith and distance is computed and compared to current
-    minimum.
-    Running parameters are returned as touple, first entry is t for helix0,
-    second entry is t for helix1.
+    Helices running parameter space is sampled within tstart and tend
+    with stepwidth tstepwith and distance is computed and compared to
+    current minimum.
+    Running parameters are returned as touple, first entry is t for
+    helix0, second entry is t for helix1.
     """
 
     global N
@@ -142,8 +143,10 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
     rp1 = np.linspace(tstart1_new, tend1_new, num=N)#,dtype=np.double)
     
     #sampling points as (N,3) array
-    points0 = np.transpose(helix(rp0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0))
-    points1 = np.transpose(helix(rp1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))
+    points0 = np.transpose(helix(rp0, phi0, eta0, q0, pt0,
+                                 dxy0, dz0, pvx0, pvy0, pvz0))
+    points1 = np.transpose(helix(rp1, phi1, eta1, q1, pt1,
+                                 dxy1, dz1, pvx1, pvy1, pvz1))
     
     # matrices with sampling points, one with copied rows, one with with copied coloumns
     p0_mat = np.tile(points0,(N,1,1))
@@ -152,7 +155,8 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
     ds = np.sum((p0_mat-p1_mat)**2, axis=-1)
     min_of_ds = np.amin(ds)
     #ind_sort_x, ind_sort_y = np.unravel_index(np.argsort(ds.flatten())[:4],ds.shape)
-    ind_sort_x_0, ind_sort_y_0 = np.unravel_index(np.argsort(ds.ravel()),(N,N),order='F')
+    ind_sort_x_0, ind_sort_y_0 = np.unravel_index(np.argsort(ds.ravel()),
+                                                  (N,N),order='F')
     x_no_duplicates = []
     y_no_duplicates = []
     
@@ -166,7 +170,8 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
         if i not in y_no_duplicates:
             y_no_duplicates.append(i)
 
-    ind_sort_x_1, ind_sort_y_1 = x_no_duplicates[:points_n], y_no_duplicates[:points_n]
+    ind_sort_x_1, ind_sort_y_1 = (x_no_duplicates[:points_n],
+                                  y_no_duplicates[:points_n])
 
     
     poca_min = np.sqrt(ds[ind_sort_x_1[0],ind_sort_y_1[0]])
@@ -229,7 +234,8 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
         #ax.text2D(0.01, 0.99, textstr, transform=ax.transAxes)
         ax.legend()
         #ax.set_title('Separation of points in running parameter space')
-        fig.savefig("./index_based_minimising_%s_%s.png"%(jentry, counter))        
+        fig.savefig("./index_based_minimising_%s_%s.png"%(jentry,
+                                                          counter))        
         plt.close()
 
     len0 = abs(t0_max - t0_min)*intervall_frac #range0 * 0.33
@@ -362,6 +368,9 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
                                 phi1, eta1, q1, pt1, dxy1, dz1,
                                 pvx1, pvy1, pvz1, chi2_1,
                                 jentry, pdis=pdis_init):
+# alternative arguments: i, j
+# Env.state[i,0], Env.state[i,1], Env.state[i,2], Env.state[i,3], Env.state[i,4], ...
+# Then the numbers need only to be passed further down. Less hassle on top level.
     """Returns a vertex candidate position,quality estimates,w/o errors.
 
     Needs weights function and should also return these.
@@ -370,18 +379,18 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
     with initial scanning and then refined scanning until the scanning
     range uncertaintyis below resolution given by helix parameter
     uncertainties.
-    This function needs still to weight the two points according to their
-    respective uncertainties.
+    This function needs still to weight the two points according to
+    their respective uncertainties.
     """
 
     global N
     tstepwidth0 = optstepwidth(pdis, phi0, eta0, q0, pt0, dxy0, dz0)
     tstepwidth1 = optstepwidth(pdis, phi1, eta1, q1, pt1, dxy1, dz1)
     
-    tstart0, tend0 = scanrange(tstepwidth0, phi0, eta0, q0, pt0, dxy0, dz0,
-                               pvx0, pvy0, pvz0)
-    tstart1, tend1 = scanrange(tstepwidth1, phi1, eta1, q1, pt1, dxy1, dz1,
-                               pvx1, pvy1, pvz1)
+    tstart0, tend0 = scanrange(tstepwidth0, phi0, eta0, q0, pt0, dxy0,
+                               dz0, pvx0, pvy0, pvz0)
+    tstart1, tend1 = scanrange(tstepwidth1, phi1, eta1, q1, pt1, dxy1, 
+                               dz1, pvx1, pvy1, pvz1)
                                
     counter = 0
     t0, t1, tstart0_new, tend0_new, tstart1_new, tend1_new,t0_min_d_cand,t1_min_d_cand, poca_min = findvertex_rp(tstart0, tend0,
