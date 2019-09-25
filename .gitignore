@@ -2,3 +2,7 @@
 *.log
 *.png
 *.pdf
+*.pt
+*~
+*.npy
+
