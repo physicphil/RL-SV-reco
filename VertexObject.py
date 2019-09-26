@@ -4,17 +4,27 @@ Return rewards?
 
 Pseudocode at the moment, the actual layout of the jet data is needed next.
 Imagine track index is enough as an argument, set up functions acordingly.
-"""   
-        
+"""
+import numpy as np
+from numpy import linalg as LA
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+import torchvision.transforms as T
+
+import Intersection_finder_absoluteCoordinates_Module as I
+
 class Poca(object):
     """A point of closest approach lies on a track i.
     
     j gives track index to which it is closest.
     weight is based on quality.
     """
-    def __init__(self, i, t, j):
+    def __init__(self, i, t, j, X):
         #Vertex computation here
-        self.x = helix(t, i) # point in space (numpy)
+        self.x = I.helix_by_index(t, i, X) # point in space (numpy)
         self.track = i # track index of poca
         self.next_to = j # next to this track
         self.weight = 1 # weigth determined by uncertainty
@@ -29,9 +39,8 @@ class VertexCandidate(object):
     recalculated evert time a track is either added or removed.
     If only one track is included, None is stored as position.
     This needs to be remembered for the reward function!
-    How is vertex aware of track variables and environment?
     """
-    def __init__(self, track):
+    def __init__(self, i, state):
         """ Initialises the vertex object with one track
         
         No position is initially returned.
@@ -43,13 +52,14 @@ class VertexCandidate(object):
         .num_steps, the number of steps taken
         .pocas list of Poca objects
         """
-        self.track_indices = [track] # list of track indices
-        self.vertex = None # 3d coordinates of vertex
+        self.track_indices = [i] # list of track indices
+        self.x = None # 3d coordinates of vertex
         self.uncertainty = None # measure of spread of pocas
         self.num_steps = 0 # how many steps have been done by the agent
-        self.pocas = [] # list of Poca objectsS
+        self.pocas = [] # list of Poca objects
+        state[i, -1] = 1
         
-    def add_track(self, i):
+    def add_track(self, i, state):
         """Adds a track to the vertex candidate.
         
         The pocas to all other tracks are computed and the weighted
@@ -60,20 +70,28 @@ class VertexCandidate(object):
         can be given.
         """
         self.num_steps += 1
-        if i in self.track_indices:
-            return self.vertex, self.uncertainty, self.num_steps, True
+        if i in self.track_indices or state[i, 0] == 0:
+            return self.x, self.uncertainty, self.num_steps, True
         # check if track is from zero padding, if so, do the same as with an
         # already added track.
-        for j in self.track_indices:
-            t_i, t_j = vertexing(i, j)
-            self.pocas.append(Poca(i, t_i, j))
-            self.pocas.append(Poca(j, t_j, i))
-        self.track_indices.append(i)
-        self.vertex = calc_vertex(self.pocas)
-        self.uncertainty = calc_uncertainty(self.pocas)
-        return self.vertex, self.uncertainty, self.num_steps, False
         
-    def rm_track(self, i):
+        # compute pocas to all other already added tracks
+        
+        for j in self.track_indices:
+            t_i, t_j, poca_sep, iter_counter = I.vertexing_by_index(i, j, state) # match this with the extra functions!
+            self.pocas.append(Poca(i, t_i, j, state))
+            self.pocas.append(Poca(j, t_j, i, state))
+            #self.pocas.append(Poca(i, 0, j, state))
+            #self.pocas.append(Poca(j, 0, i, state))
+        
+        # add track index to indices list
+        self.track_indices.append(i)
+        # compute vertex from pocas
+        self.x = self.calc_vertex()
+        self.uncertainty = self.calc_uncertainty()
+        return self.x, self.uncertainty, self.num_steps, False
+
+    def rm_track(self, i, state):
         """A track is removed from vertex candidate.
         
         This track must have been added before.
@@ -88,29 +106,25 @@ class VertexCandidate(object):
         """
         self.num_steps += 1
         if len(self.track_indices) == 2 and i in self.track_indices:
-            self.vertex = None
-            self.uncertainty = None
             self.track_indices.remove(i)
+            self.uncertainty = None
             new_poca_list = []
-            new_weight_list = []
             for j in range(len(self.pocas)):
                 if self.pocas[j].track != i and self.pocas[j].next_to != i:
                     new_poca_list.append(self.pocas[j])
-                    new_weight_list.append(self.weights[j])
             self.pocas = new_poca_list
-            self.weights = new_weight_list
-            return self.vertex, self.uncertainty, self.num_steps, False
+            self.x = self.calc_vertex()
+            return self.x, self.uncertainty, self.num_steps, False
             
         elif len(self.track_indices) == 1 and i in self.track_indices:
-            self.vertex = None
-            self.uncertainty = None
-            self.track_indices = []
+            self.track_indices.remove(i)
+            self.x = self.calc_vertex()
+            self.uncertainty = self.calc_uncertainty()
             self.pocas = []
-            self.weights = []
-            return self.vertex, self.uncertainty, self.num_steps, False
+            return self.x, self.uncertainty, self.num_steps, False
             
         elif i not in self.track_indices:
-            return self.vertex, self.uncertainty, self.num_steps, True
+            return self.x, self.uncertainty, self.num_steps, True
         # check if track is from zero padding, if so, do the same as with an
         # already added track.
         self.track_indices.remove(i)
@@ -119,29 +133,39 @@ class VertexCandidate(object):
         for j in range(len(self.pocas)):
             if self.pocas[j].track != i and self.pocas[j].next_to != i:
                 new_poca_list.append(self.pocas[j])
-                new_weight_list.append(self.weights[j])
 
         self.pocas = new_poca_list
-        self.weights = new_weight_list
-        self.vertex = calc_vertex(self.pocas)
-        self.uncertainty = calc_uncertainty(self.pocas, self_weights)
-        return self.vertex, self.uncertainty, self.num_steps, False
+        self.x = self.calc_vertex()
+        self.uncertainty = self.calc_uncertainty()
+        return self.x, self.uncertainty, self.num_steps, False
         
     def vertex_stop(self):
-        return self.vertex, self.uncertainty, self.num_steps, False
+        return self.x, self.uncertainty, self.num_steps, False
         
-    def calc_vertex(self, pocas):
+    def calc_vertex(self):
         """Takes list of pocas and computes the weighted midpoint."""
-        if len(pocas) < 2:
+        if len(self.pocas) < 2:
             return None
         norm_fac = 0
         vertex = np.zeros(3)
-        for poca in pocas:
+        for poca in self.pocas:
             norm_fac += poca.weight
-        for poca in pocas:
-            vertex += (poca.weight/form_fac) * poca.x
-        
-        
+        for poca in self.pocas:
+            vertex += (poca.weight/norm_fac) * poca.x
+        return vertex
+
+    def calc_uncertainty(self):
+        """This method computes the spread of pocas around the vertex"""
+        if len(self.pocas) < 2:
+            return None
+        norm_fac = 0
+        rms = 0
+        for poca in self.pocas:
+            norm_fac += poca.weight
+        for poca in self.pocas:
+            rms += np.sum((self.x - poca.x)**2)*(poca.weight/norm_fac) 
+        return np.sqrt(rms)
+
 
 class TrackEnvironment(object):
     """Track environment containing all valid tracks.
@@ -152,12 +176,13 @@ class TrackEnvironment(object):
         Add dim to flag all added tracks.
         Zero flag to match input dimension of policy net.
         """
-        self.has_sv = jet.sv_flag
-        # how to apply pt cut?
+        self.has_sv = False #jet.sv_flag
         # also include nPixelHits, theta for learning etc.
-        self.track_data = torch.tensor(jet) # with a gather or where? # padding
-        self.state = self.track_data # add a dimension or column with 0
-        self.vertex = VertexCandidate(0)
+        self.track_data = torch.tensor(jet,dtype=torch.float) # with a gather or where? # padding (done in input)
+        states = torch.zeros((self.track_data.shape[0],1))
+        self.state = torch.cat((self.track_data, states), 1)# add a dimension or column with 0
+        self.vertex = VertexCandidate(0, self.state)
+        self.n = self.state.shape[0]
   
     def take_action(self, a):
         """ There are 2n + 1 actions: add track 0 to n-1, remove track
@@ -168,13 +193,15 @@ class TrackEnvironment(object):
         # pflag: penalty flag (nothing was done)
         # dflag: done flag, when agent select stop action this is set to true
         vertex, uncer, numsteps, pflag, dflag = -1, -1, -1, -1, False
-        if a < n:
-            vertex, uncer, numsteps, pflag = self.vertex.add_track(a)
-            self.state[a, 0] = 1
-        elif a < 2*n:
-            vertex, uncer, numsteps, pflag = self.vertex.rm_track(a-n)
-            self.state[a-n, 0] = 0
-        elif a == 2*n:
+        if a < self.n:
+            vertex, uncer, numsteps, pflag = self.vertex.add_track(a, self.state)
+            if not pflag:
+                self.state[a, -1] = 1
+        elif a < 2*self.n:
+            vertex, uncer, numsteps, pflag = self.vertex.rm_track(a-self.n, self.state)
+            if not pflag:
+                self.state[a-self.n, -1] = 0
+        elif a == 2*self.n:
             vertex, uncer, numsteps, pflag = self.vertex.vertex_stop()
             dflag = True
         else:
@@ -183,8 +210,3 @@ class TrackEnvironment(object):
         return self.state, vertex , uncer, numsteps, pflag, dflag
         
 
-        
-        
-		
-    
-		

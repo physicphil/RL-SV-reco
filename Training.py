@@ -4,14 +4,13 @@ import time
 
 import numpy as np
 from numpy import linalg as LA
-#import ROOT
-from array import array
+import math
+import random
+
 import matplotlib
 matplotlib.use('Agg')
-import pylab
+
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from mpl_toolkits.mplot3d import Axes3D
 
 from itertools import count
 
@@ -29,7 +28,7 @@ import Intersection_finder_absoluteCoordinates_Module as I
 import VertexObject as VO
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
+print("Device: ", device)
 
 
 np_load_old = np.load
@@ -38,25 +37,18 @@ np_load_old = np.load
 np.load = lambda *a,**k: np_load_old(*a, allow_pickle=True, **k)
 
 # set up training as testing data
-'''
-mepz_opts = ['hasTHETA_CHI2', 'hasTHETA_CHI2_dlCut', 'noMEPZ', 'hasEPZ', 'hasMEPZ']
-mepz = 'hasTHETA_CHI2'
-poca = "pocas"
-scal = "scal"
-pTcut = 1.0
-ptc = "pTcut:" + str(pTcut) + "GeV"
-#could be for loops
-iserr = 'noErr'
-'''
+
 # load data in torch format
 X_data = np.load('PFC_data_pocas.npy')
 y_data = np.load('PV_true_pocas.npy')
 
-print(np.transpose(y_data[0]))
-
-
-#['pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pvIndex', 'pdgId']#, 'POCA_z', 'chi2', 'ndof', 'pdgId']
+#['pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pvIndex', 'pdgId']#, 'chi2', pvx, pvy, pvz needed!!!
 #  0       1    2       3         4      5     6            7
+print(y_data.shape)
+y_data = np.repeat(y_data, X_data.shape[1]).reshape((y_data.shape[0], X_data.shape[1],3))
+print(y_data.shape)
+print(X_data.shape)
+X_data = np.concatenate((X_data, y_data), axis=2)
 
 # apply cuts on data (pT > 1, pdgId != 0)
 for i in range(len(X_data)): # event loop
@@ -72,7 +64,7 @@ for j in range (X_data.shape[0]):
         if (X_data[j,k,0] != 0): #this means we have an actual particle, not zero padding
             nump += 1
             #convert pdgId to theta using theta = 2*atan(exp(-eta))
-            X_data[j,k,-1] = 2 * np.arctan(np.exp(-1*X_data[j,k,1]))
+            X_data[j,k,7] = 2 * np.arctan(np.exp(-1*X_data[j,k,1]))
         if (X_data[j,k,0] < 0 or (X_data[j,k,0] < 1 and X_data[j,k,0] != 0)):
             print(j, k, "We have a pT problem!")
     if (nump > maxp): 
@@ -82,14 +74,24 @@ for j in range (X_data.shape[0]):
     #order in pT so the all-zero particles will always be the ones lost when i cull
     X_data[j] = X_data[j, np.flip((X_data[j,:,0].argsort()), 0)]
 
-print(maxp)
-X_data = X_data[:,:maxp,:]
+print("Max number of valid tracks", maxp)
+#X_data = X_data[:,:maxp,:]
+X_data = X_data[:,:15,:]
 print(X_data.shape)
+
+# extract pv0 coordinates
+#print(y_data.shape)
+#print(y_data[0,:])
+
+
+
 # assign training and testing data
+# randomize data
 idx = np.random.choice(X_data.shape[0], X_data.shape[0],replace=False)
 print(idx)
 X_data = X_data[idx]
 y_data = y_data[idx]
+
 print(X_data.shape)
 X_train = X_data[:10000]
 y_train = y_data[:10000]
@@ -125,7 +127,8 @@ class DQN(nn.Module):
         x = self.fcn5(x)
         '''
         return x
-        
+
+
 def select_action_DQN(state):
     """Selects an action either based on policy or randomly"""
     global steps_done
@@ -133,14 +136,16 @@ def select_action_DQN(state):
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
         math.exp(-1. * steps_done / EPS_DECAY)
     steps_done += 1
+    a = 0
     if sample > eps_threshold:
         with torch.no_grad():
             # return the index of the max in output tensor
-            return int(policy_net(torch.tensor(state)).argmax())
+            a = int(policy_net(torch.tensor(state).to(device)).argmax())
     else:
         # return random bool
-        random_actions.append(i_episode)
-        return np.random.choice(n_actions, 1)
+        a = int(np.random.choice(n_actions, 1))
+    print("Action selected:", a)
+    return a
 
 def init_weights(m):
     """Inits weights of m by random for linear layers"""
@@ -183,20 +188,23 @@ def optimise_model_memory(batch_size):
      #   param.grad.data.clamp_(-1, 1)
     optimizer.step()
 
-print(X_data.shape)
+print(X_train.shape)
 n_actions = 1 + 2 * X_data.shape[1]
+print("# actions: ", n_actions)
+
 n_inputs = X_data.shape[1] * (X_data.shape[2] + 1)
+print("# inputs", n_inputs)
 GAMMA = 0.999
 EPS_START = 1
 EPS_END = 0.00
-EPS_DECAY = 50000
+EPS_DECAY = 50000000
 steps_done = 0
 
+MINI_BATCH = 10
 TARGET_UPDATE = 30
 num_episodes = 70
 
 memory = []
-
 
 policy_net = DQN(290, n_actions).to(device)
 target_net = DQN(290, n_actions).to(device)
@@ -205,12 +213,38 @@ optimizer = optim.Adam(policy_net.parameters(),lr=0.001)
 
 # loop over training data
 counter = 0
+steps_done = 0
 for evnt in X_train:
-    Env = VO.TrackEnvironment(torch.tensor(evnt))
-    if counter < 10:
+    Env = VO.TrackEnvironment(evnt)
+    state = Env.state
+    if counter < 1:
         print(Env.state)
-    counter += 1
+        print(Env.vertex.track_indices)
+        print(Env.vertex.track_indices)
+        print(Env.vertex.x)
+    if counter > num_episodes:
+        print("Training ended")
+        break
     
-
+    counter += 1
+    for t in count():
+        steps_done += 1
+        action = select_action_DQN(state)
+        next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
+        print(Env.vertex.track_indices)
+        print(Env.state)
+        reward = -1
+        if type(vertex_x) == np.ndarray:
+            reward = np.sum(vertex_x**2)
+        if pflag:
+            reward -= 1000
+        memory.append((state, action, reward, next_state, dflag))
+        
+        if dflag:
+            print("Episode ended")
+            break
+    
+print(counter)
+print(len(memory))
 # how to loop over jets in X_train
 # build reward function

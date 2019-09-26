@@ -1,5 +1,8 @@
+import numpy as np
+from numpy import linalg as LA
+
 r = 833.91024
-pdis_init = 1
+pdis_init = 5
 
 N = 30
 points_n = 8
@@ -122,8 +125,7 @@ def uncertainty_xyz(t, phi, eta, q, pt, dxy, dz,
 def findvertex_rp(tstart0, tend0, tstart1, tend1,
                   tstart0_new, tend0_new, tstart1_new, tend1_new,
                   phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0,
-                  phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1,
-                  counter,jentry):
+                  phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1):
     """Returns running parameters to get helices POCAs and distance.
 
     Helices running parameter space is sampled within tstart and tend
@@ -159,9 +161,7 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
                                                   (N,N),order='F')
     x_no_duplicates = []
     y_no_duplicates = []
-    
 
-    
     for i in ind_sort_x_0:
         if i not in x_no_duplicates:
             x_no_duplicates.append(i)
@@ -175,68 +175,24 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
 
     
     poca_min = np.sqrt(ds[ind_sort_x_1[0],ind_sort_y_1[0]])
-    print "Poca min from matrix: ", poca_min - np.sqrt(min_of_ds)
-    '''
-    t0_min_d_cand = [rp0[i] for i in ind_sort_x_1]
-    t1_min_d_cand = [rp1[i] for i in ind_sort_y_1]
-    '''
+    
     t0 = rp0[ind_sort_x_0[0]]
     t1 = rp1[ind_sort_y_0[0]]
-    
-    
+
     t0_min_d_cand = rp0[ind_sort_x_1]
     t1_min_d_cand = rp1[ind_sort_y_1]
-    
+
     ''' How to return new bounds: take 10 min distances and take
     min and max of the running parameters of this set
     '''
-    
+
     t0_min = min(t0_min_d_cand)
     t0_max = max(t0_min_d_cand)
     t1_min = min(t1_min_d_cand)
     t1_max = max(t1_min_d_cand)
 
-    t_index = np.unravel_index(np.argmin(ds.ravel()),ds.shape,order='F')
-    '''
-    t0 = rp0[t_index[0]]
-    t1 = rp1[t_index[1]]
-    '''
     if t1 > tend1_new or t1 < tstart1_new:
-        print("Alarm!", jentry)
-
-    
-    if False:#jentry%100==0 or jentry == 0:
-        '''
-        rps = np.concatenate(rp0,rp1)
-        a = np.concatenate(rps,ds, axis=1)
-        np.save('plot_raw_%s_%s'%(jentry, counter),a)
-        '''
-        #np.set_printoptions(precision=4)
-        #print ds
-        ds_min = np.log(ds[ind_sort_y_0[0],ind_sort_x_0[0]])
-        #print ds[ind_sort_x_0[0],ind_sort_y_0[0]]
-        fig = plt.figure()
-        ax = plt.axes()#projection='3d')
-        ax.set_xlabel("ind_x")
-        ax.set_ylabel("ind_y")
-        #ax.set_zlabel("log(poca_sep)")
-        '''
-        ax.plot_surface(range(N), range(N), np.log(ds), rstride=1, cstride=1,cmap=cm.coolwarm)
-        ax.scatter(ind_sort_x_1[:2],ind_sort_y_1[:2],2*[ds_min], label='4 minimal values')
-        ax.scatter(t_index[0],t_index[1],ds_min, label='min')
-        '''
-        n = len(ind_sort_x_1)
-        ax.contour(rp0, rp1, np.log(ds))
-        ax.scatter(rp0[ind_sort_x_0[:n]],rp1[ind_sort_y_0[:n]], label='%s minimal values'%(n))
-        ax.scatter(rp0[ind_sort_x_1],rp1[ind_sort_y_1], label='%s no duplicate minimal values'%(n)) 
-        ax.scatter(rp0[t_index[0]],rp1[t_index[1]], label='min')
-        #textstr = 
-        #ax.text2D(0.01, 0.99, textstr, transform=ax.transAxes)
-        ax.legend()
-        #ax.set_title('Separation of points in running parameter space')
-        fig.savefig("./index_based_minimising_%s_%s.png"%(jentry,
-                                                          counter))        
-        plt.close()
+        print("Alarm!")
 
     len0 = abs(t0_max - t0_min)*intervall_frac #range0 * 0.33
     len1 = abs(t1_max - t1_min)*intervall_frac #range1 * 0.33
@@ -328,35 +284,6 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
     else:
         tend1_newn = tend1
     '''    
-    '''
-    if jentry%1000 == 0:
-        print rp0
-        print rp1
-        print rp0[ind_sort_x_0[0]], t0
-        print rp1[ind_sort_y_0[0]], t1
-    '''
-    if False:#jentry%1000 == 0:
-        ds_min = np.log(ds[ind_sort_x_0[0],ind_sort_y_0[0]])
-        fig = plt.figure()
-        ax = plt.axes()#projection='3d')
-        ax.set_xlabel("t0")
-        ax.set_ylabel("t1")
-        #ax.set_zlabel("log(poca_sep)")
-        #ax.plot_surface(rp0, rp1, np.log(ds), rstride=1, cstride=1,cmap=cm.coolwarm)
-        ax.contour(rp0, rp1, np.log(ds))
-        '''
-        cset = ax.contour(rp0, rp1, np.log(ds), zdir='z')
-        cset = ax.contour(rp0, rp1, np.log(ds), zdir='x')
-        cset = ax.contour(rp0, rp1, np.log(ds), zdir='y')
-        '''
-        ax.scatter(t0,t1,ds_min, label='min')
-        ax.scatter([tstart0_newn,tstart0_newn,tend0_newn,tend0_newn],
-                   [tstart1_newn,tend1_newn,tstart1_newn,tend1_newn],
-                   [ds_min]*4,label='area to zoom in')
-        ax.legend()
-        #ax.set_title('Separation of points in running parameter space')
-        fig.savefig("./ds_%s_%s.png"%(jentry, counter))        
-        plt.close()
 
     return t0, t1, tstart0_newn, tend0_newn, tstart1_newn, tend1_newn,t0_min_d_cand,t1_min_d_cand, poca_min
 
@@ -368,9 +295,6 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
                                 phi1, eta1, q1, pt1, dxy1, dz1,
                                 pvx1, pvy1, pvz1, chi2_1,
                                 pdis=pdis_init):
-# alternative arguments: i, j
-# Env.state[i,0], Env.state[i,1], Env.state[i,2], Env.state[i,3], Env.state[i,4], ...
-# Then the numbers need only to be passed further down. Less hassle on top level.
     """Returns a vertex candidate position,quality estimates,w/o errors.
 
     Needs weights function and should also return these.
@@ -391,15 +315,14 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
                                dz0, pvx0, pvy0, pvz0)
     tstart1, tend1 = scanrange(tstepwidth1, phi1, eta1, q1, pt1, dxy1, 
                                dz1, pvx1, pvy1, pvz1)
-                               
-    counter = 0
+
     t0, t1, tstart0_new, tend0_new, tstart1_new, tend1_new,t0_min_d_cand,t1_min_d_cand, poca_min = findvertex_rp(tstart0, tend0,
                                 tstart1, tend1, tstart0, tend0,
                                 tstart1, tend1,
                                 phi0, eta0, q0, pt0, dxy0, dz0,
                                 pvx0, pvy0, pvz0,
                                 phi1, eta1, q1, pt1, dxy1, dz1,
-                                pvx1, pvy1, pvz1, counter,jentry)
+                                pvx1, pvy1, pvz1)
     
     '''
     Find out how far points are separated, if above threshold zoom in.
@@ -409,12 +332,12 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
     pdis_0 = pointdistance((tend0-tstart0)/float(N),phi0, eta0, q0, pt0, dxy0, dz0)
     pdis_1 = pointdistance((tend1-tstart1)/float(N),phi1, eta1, q1, pt1, dxy1, dz1)
     pdis_max = max(pdis_0, pdis_1)
-
+    counter = 0
     while pdis_max > 0.001:
-
+        print("I do one more iteration")
         #------catch events that take too long---------
-        if counter > 35:
-            broken_minimisation.append(jentry)
+        if counter > 25:
+            #broken_minimisation.append(jentry)
             poca_sep = LA.norm(helix(t0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0)
                      - helix(t1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))
             return t0, t1, poca_sep, counter
@@ -426,17 +349,16 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
                                 phi0, eta0, q0, pt0, dxy0, dz0,
                                 pvx0, pvy0, pvz0,
                                 phi1, eta1, q1, pt1, dxy1, dz1,
-                                pvx1, pvy1, pvz1, counter,jentry)
+                                pvx1, pvy1, pvz1)
 
         pdis_0 = pointdistance((tend0_new-tstart0_new)/float(N),phi0, eta0, q0, pt0, dxy0, dz0)
         pdis_1 = pointdistance((tend1_new-tstart1_new)/float(N),phi1, eta1, q1, pt1, dxy1, dz1)
         pdis_max = max(pdis_0, pdis_1)
         
         
-        poca_sep = LA.norm(helix(t0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0)
-                     - helix(t1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))  
-        print "Still off by: ", poca_min-poca_sep
-        poca_seps.append(poca_sep)
+        #poca_sep = LA.norm(helix(t0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0)
+         #            - helix(t1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))  
+        #poca_seps.append(poca_sep)
 
     poca_sep = LA.norm(helix(t0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0)
                      - helix(t1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))
@@ -449,27 +371,39 @@ def get_helix_params(i, X):
     Input are the track index and a jet (collection of tracks)
     The ith PFC entry is taken and reordered to match the vertexing
     input. Another function can use this to create all arguments needed
-    for the vertexing."""
-    x0, x1, x2, x3, x4, x5, x6, x7, x8, x9 = X[i]
+    for the vertexing.
+    
+    This function must be changed in order to handle new input types."""
+
+#['pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pvIndex', 'pdgId']#, 'chi2', pvx, pvy, pvz needed!!!
+#  0       1    2       3         4      5     6            7
+    x0, x1, x2, x3, x4, x5 = X[i,:6]
+    x6, x7, x8 = X[i, 8:11]
     # , x9, x10, x11, x12, x13
-    phi = x0
-    eta = x1
-    q = x2
-    pt = x3
-    dxy  = x4
-    dz = x5
-    pvx = x6
-    pvy = x7
-    pvz = x8
-    chi2 = x9
+    phi = float(x2)
+    eta = float(x1)
+    q = float(x3)
+    pt = float(x0)
+    dxy  = float(x4)
+    dz = float(x5)
+    pvx = float(x6) #x6
+    pvy = float(x7) #x7
+    pvz = float(x8) #x8
+    chi2 = 1
     return phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2
     
+def helix_by_index(t, i, X):
+    phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2_ = get_helix_params(i, X)
+    return helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
+    
 def vertexing_by_index(i, j, X):
-    """Calls vertexing with the right arguemts from jet data"""
-    phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0, chi2_0 =get_helix_params(i, X)
-    phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1, chi2_1 =get_helix_params(j, X)
-    return vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0, 
+    """Calls vertexing with the right argumets from jet data."""
+    phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0, chi2_0 = get_helix_params(i, X)
+    phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1, chi2_1 = get_helix_params(j, X)
+    print("Got til parameter setup")
+    t0, t1, poca_sep, counter = vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0, 
                                 pvx0, pvy0, pvz0, chi2_0, 
                                 phi1, eta1, q1, pt1, dxy1, dz1,
                                 pvx1, pvy1, pvz1, chi2_1,
                                 pdis=pdis_init)
+    return t0, t1, poca_sep, counter
