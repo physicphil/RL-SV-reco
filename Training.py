@@ -136,7 +136,7 @@ def select_action_DQN(state):
         with torch.no_grad():
             # return the index of the max in output tensor
             state = state.to(device)
-            a = int(policy_net(torch.tensor(state.flatten())).argmax())
+            a = int(policy_net(state.flatten()).argmax())
     else:
         # return random bool
         a = int(np.random.choice(n_actions, 1))
@@ -173,7 +173,7 @@ def optimise_model_memory(batch_size):
         y_batch.append(y_target)
         #.type(torch.FloatTensor)
     x_batch = torch.cat(x_batch).reshape((batch_size, n_inputs)).to(device)
-    y_batch = torch.tensor(y_batch).type(torch.FloatTensor).to(device)
+    y_batch = torch.tensor(y_batch).type(torch.FloatTensor).squeeze().to(device)
     action_batch = torch.tensor(action_batch).reshape((batch_size,1)).to(device)
     optimizer.zero_grad()
     out = policy_net(x_batch).reshape((batch_size, n_actions))
@@ -202,16 +202,16 @@ init_weights(policy_net)
 optimizer = optim.Adam(policy_net.parameters(),lr=0.001)
 
 
-GAMMA = 0.999
+GAMMA = 0.99
 EPS_START = 1
-EPS_END = 0.00
-EPS_DECAY = 5000
+EPS_END = 0.1
+EPS_DECAY = 20000
 steps_done = 0
 
-MINI_BATCH = 100
+MINI_BATCH = 50
 TARGET_UPDATE = 20
-epochs = 1
-num_episodes = 1000
+epochs = 10
+# num_episodes = 1000
 
 # loop over training data
 counter = 0
@@ -230,7 +230,11 @@ for i_epoch in range(epochs):
         counter += 1
         Env = VO.TrackEnvironment(evnt)
         state = Env.state
-        
+        if len(memory) > 10000:
+            #l = len(memory)
+            #idx = np.random.choice(l, l,replace=False)
+            #memory = memory[idx]
+            memory = memory[:5000]
         if counter < 100:
             print(Env.state)
             print(Env.vertex.track_indices)
@@ -276,18 +280,13 @@ for i_epoch in range(epochs):
         state = Env.state
         for t in count():
             steps_done += 1
-            print(steps_done)
+            action = int(policy_net(state.flatten()).argmax())
             next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
             reward = -500 # if no vertex, this should be positive
             if type(vertex_x) == np.ndarray:
                 reward = displ_prev - np.sum(vertex_x**2) + 2 *len(Env.vertex.track_indices)
             if pflag:
                 reward -= 1000
-            print(reward)
-            memory.append((state, action, reward, next_state, dflag))
-            optimise_model_memory(MINI_BATCH)
-            if steps_done%TARGET_UPDATE == 0:
-                target_net.load_state_dict(policy_net.state_dict())
             if dflag:
                 if type(Env.vertex.x) == np.ndarray:
                     test_poca_dist.append(LA.norm(Env.vertex.x))
@@ -300,17 +299,17 @@ for i_epoch in range(epochs):
         plt.plot(test_ntracks_used)
         plt.xlabel("episode")
         plt.ylabel(r"# tracks used")
-        plt.savefig(f"test_ntracks_ep{i_epoch}.png")
+        plt.savefig(f"RL_oldtree_test_ntracks_epi{i_epoch}.png")
         plt.close()
         
         plt.plot(test_poca_dist)
         plt.xlabel("episode")
         plt.ylabel(r"vertex displacement")
-        plt.savefig(f"test_displacement_ep{i_epoch}.png")
+        plt.savefig(f"RL_oldtree_test_displacement_epi{i_epoch}.png")
         plt.close()
-        
-        av_test_ntracks_used.append(np.mean(test_ntracks_used))
-        av_test_poca_dist.append(np.mean(test_poca_dist))
+
+    av_test_ntracks_used.append(np.mean(test_ntracks_used))
+    av_test_poca_dist.append(np.mean(test_poca_dist))
 
 print("Training ended")
 plt.plot(final_poca_dist)
@@ -326,19 +325,20 @@ plt.close()
 
 plt.plot(episode_lengths)
 plt.title("Actions in an episode")
-plt.savefig("RL_oldtree_elength.png")
+plt.savefig("RL_oldtree_epilength.png")
 plt.close()
 
 plt.plot(av_test_ntracks_used)
 plt.xlabel("epoch")
 plt.ylabel(r"# tracks used")
-plt.savefig("test_ntracks.png")
+plt.savefig("RL_oldtree_test_ntracks.png")
 plt.close()
 
 plt.plot(av_test_poca_dist)
 plt.xlabel("epoch")
+plt.ylabel("Av vertex displacement")
 plt.ylabel(r"vertex displacement")
-plt.savefig("test_displacement.png")
+plt.savefig("RL_oldtree_test_displacement.png")
 plt.close()
     
 

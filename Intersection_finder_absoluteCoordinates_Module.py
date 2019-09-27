@@ -353,11 +353,6 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
         pdis_0 = pointdistance((tend0_new-tstart0_new)/float(N),phi0, eta0, q0, pt0, dxy0, dz0)
         pdis_1 = pointdistance((tend1_new-tstart1_new)/float(N),phi1, eta1, q1, pt1, dxy1, dz1)
         pdis_max = max(pdis_0, pdis_1)
-        
-        
-        #poca_sep = LA.norm(helix(t0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0)
-         #            - helix(t1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))  
-        #poca_seps.append(poca_sep)
 
     poca_sep = LA.norm(helix(t0, phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0)
                      - helix(t1, phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1))
