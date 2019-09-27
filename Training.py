@@ -53,7 +53,7 @@ X_data = np.concatenate((X_data, y_data), axis=2)
 # apply cuts on data (pT > 1, pdgId != 0)
 for i in range(len(X_data)): # event loop
     for j in range(len(X_data[i])):
-        if X_data[i,j,0] < 1 or X_data[i,j,6] != 0 or X_data[i,j,7] == 0:
+        if X_data[i,j,0] < 1 or X_data[i,j,6] != 0 or X_data[i,j,7] == 0 or X_data[i,j,3] == 0:
             X_data[i,j] = np.zeros(len(X_data[i,j]))
 
 maxp = 0
@@ -76,14 +76,9 @@ for j in range (X_data.shape[0]):
 
 print("Max number of valid tracks", maxp)
 #X_data = X_data[:,:maxp,:]
-X_data = X_data[:,:15,:]
+num_pfc_cut = 15 # maxp
+X_data = X_data[:,:num_pfc_cut,:]
 print(X_data.shape)
-
-# extract pv0 coordinates
-#print(y_data.shape)
-#print(y_data[0,:])
-
-
 
 # assign training and testing data
 # randomize data
@@ -109,7 +104,7 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.fcn1 = nn.Linear(h,512)
         self.fcn2 = nn.Linear(512,512)
-        self.fcn3 = nn.Linear(100,50)
+        self.fcn3 = nn.Linear(512,outputs)
         '''
         self.fcn4 = nn.Linear(50,10)
         self.fcn6 = nn.Linear(10,10)
@@ -140,7 +135,8 @@ def select_action_DQN(state):
     if sample > eps_threshold:
         with torch.no_grad():
             # return the index of the max in output tensor
-            a = int(policy_net(torch.tensor(state).to(device)).argmax())
+            state = state.to(device)
+            a = int(policy_net(torch.tensor(state.flatten())).argmax())
     else:
         # return random bool
         a = int(np.random.choice(n_actions, 1))
@@ -168,20 +164,22 @@ def optimise_model_memory(batch_size):
     batch_size = min(len(memory), batch_size)
     minibatch = random.sample(memory, batch_size)
     for state, action, reward, next_state, done in minibatch:
+        x_batch.append(state.flatten())
+        state = state.to(device)
+        next_state = next_state.to(device)
         y_target = reward if done else reward + GAMMA \
-                              * (target_net(torch.ones((1,1))*next_state).max())
+                              * float((target_net(next_state.flatten()).max()).to('cpu'))
         action_batch.append(int(action))
-        x_batch.append(state)
         y_batch.append(y_target)
-        
-    x_batch = torch.tensor(x_batch).type(torch.FloatTensor).reshape((batch_size,1))
-    y_batch = torch.tensor(y_batch).type(torch.FloatTensor).reshape((batch_size,1))
-    action_batch = torch.tensor(action_batch).type(torch.LongTensor).reshape((batch_size,1))
+        #.type(torch.FloatTensor)
+    x_batch = torch.cat(x_batch).reshape((batch_size, n_inputs)).to(device)
+    y_batch = torch.tensor(y_batch).type(torch.FloatTensor).to(device)
+    action_batch = torch.tensor(action_batch).reshape((batch_size,1)).to(device)
     optimizer.zero_grad()
-    #out = policy_net(x_batch).type(torch.FloatTensor).max()
-    out = policy_net(x_batch).type(torch.FloatTensor).gather(1, action_batch)
-    loss = F.smooth_l1_loss(out, y_batch)
-    #loss = F.mse_loss(out, y_batch)
+    out = policy_net(x_batch).reshape((batch_size, n_actions))
+    out = out.gather(1, action_batch).squeeze()
+    #loss = F.smooth_l1_loss(out, y_batch)
+    loss = F.mse_loss(out, y_batch)
     loss.backward()
     # clip error values to values between -1 and 1
     #for param in policy_net.parameters():
@@ -194,57 +192,156 @@ print("# actions: ", n_actions)
 
 n_inputs = X_data.shape[1] * (X_data.shape[2] + 1)
 print("# inputs", n_inputs)
-GAMMA = 0.999
-EPS_START = 1
-EPS_END = 0.00
-EPS_DECAY = 50000000
-steps_done = 0
 
-MINI_BATCH = 10
-TARGET_UPDATE = 30
-num_episodes = 70
 
 memory = []
 
-policy_net = DQN(290, n_actions).to(device)
-target_net = DQN(290, n_actions).to(device)
+policy_net = DQN(n_inputs, n_actions).to(device)
+target_net = DQN(n_inputs, n_actions).to(device)
 init_weights(policy_net)
 optimizer = optim.Adam(policy_net.parameters(),lr=0.001)
+
+
+GAMMA = 0.999
+EPS_START = 1
+EPS_END = 0.00
+EPS_DECAY = 5000
+steps_done = 0
+
+MINI_BATCH = 100
+TARGET_UPDATE = 20
+epochs = 1
+num_episodes = 1000
 
 # loop over training data
 counter = 0
 steps_done = 0
-for evnt in X_train:
-    Env = VO.TrackEnvironment(evnt)
-    state = Env.state
-    if counter < 1:
-        print(Env.state)
-        print(Env.vertex.track_indices)
-        print(Env.vertex.track_indices)
-        print(Env.vertex.x)
-    if counter > num_episodes:
-        print("Training ended")
-        break
-    
-    counter += 1
-    for t in count():
-        steps_done += 1
-        action = select_action_DQN(state)
-        next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
-        print(Env.vertex.track_indices)
-        print(Env.state)
-        reward = -1
-        if type(vertex_x) == np.ndarray:
-            reward = np.sum(vertex_x**2)
-        if pflag:
-            reward -= 1000
-        memory.append((state, action, reward, next_state, dflag))
+
+final_poca_dist = []
+ntracks_used = []
+episode_lengths = []
+
+av_test_ntracks_used = []
+av_test_poca_dist = []
+
+for i_epoch in range(epochs):
+    # go through training data once per episode
+    for evnt in X_train:
+        counter += 1
+        Env = VO.TrackEnvironment(evnt)
+        state = Env.state
         
-        if dflag:
-            print("Episode ended")
-            break
+        if counter < 100:
+            print(Env.state)
+            print(Env.vertex.track_indices)
+            print(Env.vertex.track_indices)
+            print(Env.vertex.x)
+
+        for t in count():
+            steps_done += 1
+            print("Steps done: ", steps_done)
+            displ_prev = 10000
+            if type(Env.vertex.x) == np.ndarray:
+                displ_prev = LA.norm(Env.vertex.x)
+            action = select_action_DQN(state)
+            next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
+            print(Env.vertex.track_indices)
+            #print(Env.state)
+            reward = -500 # if no vertex, this should be positive
+            if type(vertex_x) == np.ndarray:
+                reward = displ_prev - np.sum(vertex_x**2) + 2 *len(Env.vertex.track_indices)
+            if pflag:
+                reward -= 1000
+            print(reward)
+            memory.append((state, action, reward, next_state, dflag))
+            state = next_state
+            optimise_model_memory(MINI_BATCH)
+            if steps_done%TARGET_UPDATE == 0:
+                target_net.load_state_dict(policy_net.state_dict())
+            if dflag:
+                if type(Env.vertex.x) == np.ndarray:
+                    final_poca_dist.append(LA.norm(Env.vertex.x))
+                else:
+                    final_poca_dist.append(1000000)
+                ntracks_used.append(len(Env.vertex.track_indices))
+                episode_lengths.append(t+1)
+                print("Episode ended")
+                break
+                
+    # test performance on test data once per episode (no random actions!)
+    test_ntracks_used = []
+    test_poca_dist = []
+    for evnt in X_test:
+        Env = VO.TrackEnvironment(evnt)
+        state = Env.state
+        for t in count():
+            steps_done += 1
+            print(steps_done)
+            next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
+            reward = -500 # if no vertex, this should be positive
+            if type(vertex_x) == np.ndarray:
+                reward = displ_prev - np.sum(vertex_x**2) + 2 *len(Env.vertex.track_indices)
+            if pflag:
+                reward -= 1000
+            print(reward)
+            memory.append((state, action, reward, next_state, dflag))
+            optimise_model_memory(MINI_BATCH)
+            if steps_done%TARGET_UPDATE == 0:
+                target_net.load_state_dict(policy_net.state_dict())
+            if dflag:
+                if type(Env.vertex.x) == np.ndarray:
+                    test_poca_dist.append(LA.norm(Env.vertex.x))
+                else:
+                    test_poca_dist.append(1000000)
+                test_ntracks_used.append(len(Env.vertex.track_indices))
+                episode_lengths.append(t+1)
+                print("Episode ended")
+                break
+        plt.plot(test_ntracks_used)
+        plt.xlabel("episode")
+        plt.ylabel(r"# tracks used")
+        plt.savefig(f"test_ntracks_ep{i_epoch}.png")
+        plt.close()
+        
+        plt.plot(test_poca_dist)
+        plt.xlabel("episode")
+        plt.ylabel(r"vertex displacement")
+        plt.savefig(f"test_displacement_ep{i_epoch}.png")
+        plt.close()
+        
+        av_test_ntracks_used.append(np.mean(test_ntracks_used))
+        av_test_poca_dist.append(np.mean(test_poca_dist))
+
+print("Training ended")
+plt.plot(final_poca_dist)
+plt.title("Vertex displacement")
+plt.yscale('log')
+plt.savefig("RL_oldtree_poca_displacement.png")
+plt.close()
+
+plt.plot(ntracks_used)
+plt.title("Number of tracks used")
+plt.savefig("RL_oldtree_ntracks.png")
+plt.close()
+
+plt.plot(episode_lengths)
+plt.title("Actions in an episode")
+plt.savefig("RL_oldtree_elength.png")
+plt.close()
+
+plt.plot(av_test_ntracks_used)
+plt.xlabel("epoch")
+plt.ylabel(r"# tracks used")
+plt.savefig("test_ntracks.png")
+plt.close()
+
+plt.plot(av_test_poca_dist)
+plt.xlabel("epoch")
+plt.ylabel(r"vertex displacement")
+plt.savefig("test_displacement.png")
+plt.close()
     
+
 print(counter)
 print(len(memory))
-# how to loop over jets in X_train
-# build reward function
+

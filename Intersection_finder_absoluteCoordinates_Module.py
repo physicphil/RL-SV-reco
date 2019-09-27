@@ -334,7 +334,6 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
     pdis_max = max(pdis_0, pdis_1)
     counter = 0
     while pdis_max > 0.001:
-        print("I do one more iteration")
         #------catch events that take too long---------
         if counter > 25:
             #broken_minimisation.append(jentry)
@@ -400,7 +399,6 @@ def vertexing_by_index(i, j, X):
     """Calls vertexing with the right argumets from jet data."""
     phi0, eta0, q0, pt0, dxy0, dz0, pvx0, pvy0, pvz0, chi2_0 = get_helix_params(i, X)
     phi1, eta1, q1, pt1, dxy1, dz1, pvx1, pvy1, pvz1, chi2_1 = get_helix_params(j, X)
-    print("Got til parameter setup")
     t0, t1, poca_sep, counter = vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0, 
                                 pvx0, pvy0, pvz0, chi2_0, 
                                 phi1, eta1, q1, pt1, dxy1, dz1,
