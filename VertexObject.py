@@ -182,6 +182,8 @@ class TrackEnvironment(object):
         states = torch.zeros((self.track_data.shape[0],1))
         self.state = torch.cat((self.track_data, states), 1)# add a dimension or column with 0
         self.vertex = VertexCandidate(0, self.state)
+        #self.take_action(1)
+        
         self.n = self.state.shape[0]
   
     def take_action(self, a):

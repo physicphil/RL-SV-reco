@@ -1,6 +1,13 @@
 import numpy as np
 from numpy import linalg as LA
 
+import matplotlib
+#matplotlib.use('Agg')
+import pylab
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from mpl_toolkits.mplot3d import Axes3D
+
 r = 833.91024
 pdis_init = 5
 
@@ -387,7 +394,7 @@ def get_helix_params(i, X):
     return phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2
     
 def helix_by_index(t, i, X):
-    phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2_ = get_helix_params(i, X)
+    phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2 = get_helix_params(i, X)
     return helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
     
 def vertexing_by_index(i, j, X):
@@ -400,3 +407,60 @@ def vertexing_by_index(i, j, X):
                                 pvx1, pvy1, pvz1, chi2_1,
                                 pdis=pdis_init)
     return t0, t1, poca_sep, counter
+
+
+def straight_line_intersect(phi0, eta0, q0, pt0, dxy0, dz0, 
+                                pvx0, pvy0, pvz0, chi2_0, 
+                                phi1, eta1, q1, pt1, dxy1, dz1,
+                                pvx1, pvy1, pvz1):
+    d0 = np.array([]) # directional vector of line 0
+    p0 = np.array([]) # fixed point of line 0
+    d1 = np.array([]) # directional vector of line 1
+    p1 = np.array([]) # fixed point of line 1
+    
+    return None
+
+
+def helices_plot(X, tracks, legend=True, barrel=False, num_points=200,
+                 pocas=[], textstr = '', true_vertex=None,
+                 reco_vertex=None):
+    """ Plots all helices provided as a tensor of helix parameters.
+    
+    Takes an input multiple sets as helix parameters. With barrel the 
+    boundaries of the barrel can be plotted.
+    A list of lists of running parameters can be passed to plot the
+    points of closest approach for each track.
+    Also the reco and true verteices can be passed to be plotted.
+    """
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    ax.set_xlabel("X (mm)")
+    ax.set_ylabel("Y (mm)")
+    ax.set_zlabel("Z (mm)")
+    for i in tracks:
+        phi, eta, q, pt, dxy, dz, pvx, pvy, pvz,_ = get_helix_params(i, X)
+        tstepwidth = optstepwidth(pdis_init, phi, eta, q, pt, dxy, dz)
+        tstart, tend = scanrange(tstepwidth, phi, eta, q, pt, dxy, dz,
+                                 pvx, pvy, pvz)
+        points = [helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
+                for t in np.linspace(tstart, tend, num_points)]
+        ax.plot([i[0] for i in points], [i[1] for i in points],
+                [i[2] for i in points],label=f"track {i}")
+    # plot pocas
+    for poca in pocas:
+        track = poca.track
+        near = poca.next_to
+        poca = poca.x
+        ax.scatter(poca[0], poca[1], poca[2], label=f"poca{track}{near}")
+    # plot barrel if turned on
+    if barrel :
+        x=np.linspace(-110, 110, 100)
+        z=np.linspace(-275, 275, 100)
+        Xc, Zc=np.meshgrid(x, z)
+        Yc = np.sqrt(110**2-(Xc)**2)
+        ax.plot_surface(Xc,-Yc, Zc, alpha=0.2, color='g',rstride=20, cstride=10)
+        ax.plot_surface(Xc, Yc, Zc, alpha=0.2, color='g',rstride=20, cstride=10)
+    if legend:
+        ax.legend()
+    
+    return fig, ax

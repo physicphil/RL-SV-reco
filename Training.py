@@ -76,7 +76,7 @@ for j in range (X_data.shape[0]):
 
 print("Max number of valid tracks", maxp)
 #X_data = X_data[:,:maxp,:]
-num_pfc_cut = 15 # maxp
+num_pfc_cut = 7 # maxp
 X_data = X_data[:,:num_pfc_cut,:]
 print(X_data.shape)
 
@@ -140,14 +140,14 @@ def select_action_DQN(state):
     else:
         # return random bool
         a = int(np.random.choice(n_actions, 1))
-    print("Action selected:", a)
+    #print("Action selected:", a)
     return a
 
 def init_weights(m):
     """Inits weights of m by random for linear layers"""
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform(m.weight)
-        m.bias.data.fill_(0.01)
+        m.bias.data.fill_(0.00)
 
 # maybe change reward such that it can be calculated after the experience
 # this way training can be made faster by keeping memories
@@ -199,18 +199,18 @@ memory = []
 policy_net = DQN(n_inputs, n_actions).to(device)
 target_net = DQN(n_inputs, n_actions).to(device)
 init_weights(policy_net)
-optimizer = optim.Adam(policy_net.parameters(),lr=0.001)
+optimizer = optim.Adam(policy_net.parameters(),lr=0.01)
 
 
-GAMMA = 0.99
+GAMMA = 0.8
 EPS_START = 1
 EPS_END = 0.1
-EPS_DECAY = 20000
+EPS_DECAY = 5000
 steps_done = 0
 
-MINI_BATCH = 50
+MINI_BATCH = 100
 TARGET_UPDATE = 20
-epochs = 10
+epochs = 3
 # num_episodes = 1000
 
 # loop over training data
@@ -224,11 +224,23 @@ episode_lengths = []
 av_test_ntracks_used = []
 av_test_poca_dist = []
 
+rewards = []
+
+# print("Start plotting")
+# fig, ax = I.helices_plot(X_train[1], [1,2], barrel=True)
+# fig.savefig("helix0.png")
+# plt.close()
+
+print("Start training")
+
 for i_epoch in range(epochs):
     # go through training data once per episode
-    for evnt in X_train:
+    for i in range(X_train.shape[0]):
+        if X_train[i, 0, 0] == 0:
+            continue
         counter += 1
-        Env = VO.TrackEnvironment(evnt)
+        print("Currently at event: ", )
+        Env = VO.TrackEnvironment(X_train[i])
         state = Env.state
         if len(memory) > 10000:
             #l = len(memory)
@@ -240,71 +252,101 @@ for i_epoch in range(epochs):
             print(Env.vertex.track_indices)
             print(Env.vertex.track_indices)
             print(Env.vertex.x)
-
+            
+        evnt_counter = 0    
         for t in count():
             steps_done += 1
+            evnt_counter += 1
             print("Steps done: ", steps_done)
-            displ_prev = 10000
+            err_prev = 10
+            true_PV = np.array([y_train[i,0], y_train[i,1], y_train[i,2]])
             if type(Env.vertex.x) == np.ndarray:
-                displ_prev = LA.norm(Env.vertex.x)
+                err_prev = LA.norm(Env.vertex.x-true_PV)
             action = select_action_DQN(state)
             next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
             print(Env.vertex.track_indices)
             #print(Env.state)
+            # set up reward, if a vertex can be computed, set it to change in displacement
             reward = -500 # if no vertex, this should be positive
             if type(vertex_x) == np.ndarray:
-                reward = displ_prev - np.sum(vertex_x**2) + 2 *len(Env.vertex.track_indices)
+                reward = err_prev - LA.norm(vertex_x-true_PV) \
+                         + 50 *len(Env.vertex.track_indices)
+            if dflag:
+                reward += 10
             if pflag:
-                reward -= 1000
-            print(reward)
+                reward -= 10000
+            rewards.append(reward)
+            print(f"Reward for action {action}: ", reward)
             memory.append((state, action, reward, next_state, dflag))
             state = next_state
             optimise_model_memory(MINI_BATCH)
             if steps_done%TARGET_UPDATE == 0:
                 target_net.load_state_dict(policy_net.state_dict())
-            if dflag:
+            if dflag or evnt_counter > 5000:
+                if i < 10:
+                    fig, ax = I.helices_plot(X_test[i],
+                                 Env.vertex.track_indices,
+                                 pocas=Env.vertex.pocas, barrel=True)
+                    fig.savefig(f"helix_train_{i}.png")
+                    plt.close()
                 if type(Env.vertex.x) == np.ndarray:
-                    final_poca_dist.append(LA.norm(Env.vertex.x))
-                else:
-                    final_poca_dist.append(1000000)
+                    final_poca_dist.append(LA.norm(Env.vertex.x-true_PV))
+                #else:
+                    #final_poca_dist.append(1000000)
                 ntracks_used.append(len(Env.vertex.track_indices))
                 episode_lengths.append(t+1)
-                print("Episode ended")
+                if dflag:
+                    print("Episode ended naturally")
+                else:
+                    print("Episode ended forcefully")
                 break
                 
     # test performance on test data once per episode (no random actions!)
     test_ntracks_used = []
     test_poca_dist = []
-    for evnt in X_test:
-        Env = VO.TrackEnvironment(evnt)
+    print("Started testing")
+    for i in range(X_test.shape[0]):
+        Env = VO.TrackEnvironment(X_test[i])
         state = Env.state
+        test_counter = 0
         for t in count():
             steps_done += 1
-            action = int(policy_net(state.flatten()).argmax())
+            test_counter += 1
+            state = state.flatten().to(device)
+            action = int(policy_net(state).argmax())
             next_state, vertex_x, uncertainty, n, dflag, pflag = Env.take_action(action)
-            reward = -500 # if no vertex, this should be positive
-            if type(vertex_x) == np.ndarray:
-                reward = displ_prev - np.sum(vertex_x**2) + 2 *len(Env.vertex.track_indices)
-            if pflag:
-                reward -= 1000
-            if dflag:
+            true_PV = np.array([y_test[i,0], y_test[i,1], y_test[i,2]])
+            if dflag or test_counter > 1000:
+                if i < 10:
+                    fig, ax = I.helices_plot(X_test[i],
+                                 Env.vertex.track_indices,
+                                 pocas=Env.vertex.pocas, barrel=True)
+                    fig.savefig(f"helix_test_{i}.png")
+                    plt.close()
+
                 if type(Env.vertex.x) == np.ndarray:
-                    test_poca_dist.append(LA.norm(Env.vertex.x))
-                else:
-                    test_poca_dist.append(1000000)
+                    test_poca_dist.append(LA.norm(Env.vertex.x-true_PV))
+                #else:
+                    #test_poca_dist.append(1000000)
                 test_ntracks_used.append(len(Env.vertex.track_indices))
                 episode_lengths.append(t+1)
-                print("Episode ended")
+                if dflag:
+                    print("Episode ended naturally")
+                else:
+                    print("Episode ended forcefully")
                 break
-        plt.plot(test_ntracks_used)
-        plt.xlabel("episode")
-        plt.ylabel(r"# tracks used")
+        plt.hist(test_ntracks_used)
+        plt.xlabel("Num tracks used")
+        plt.ylabel("Events")
+        plt.title("Test sample")
         plt.savefig(f"RL_oldtree_test_ntracks_epi{i_epoch}.png")
         plt.close()
         
-        plt.plot(test_poca_dist)
-        plt.xlabel("episode")
-        plt.ylabel(r"vertex displacement")
+        plt.hist(test_poca_dist)
+        plt.xlabel("Vertexing error")
+        plt.ylabel("Events")
+        plt.title("Test sample")
+        plt.yscale('log')
         plt.savefig(f"RL_oldtree_test_displacement_epi{i_epoch}.png")
         plt.close()
 
@@ -312,35 +354,54 @@ for i_epoch in range(epochs):
     av_test_poca_dist.append(np.mean(test_poca_dist))
 
 print("Training ended")
-plt.plot(final_poca_dist)
-plt.title("Vertex displacement")
+plt.hist(final_poca_dist)
+plt.xlabel("Vertexiong error")
+plt.ylabel("Attempts")
+#plt.title("Vertexing error")
 plt.yscale('log')
 plt.savefig("RL_oldtree_poca_displacement.png")
 plt.close()
 
-plt.plot(ntracks_used)
-plt.title("Number of tracks used")
+plt.scatter(range(len(final_poca_dist)), final_poca_dist)
+plt.xlabel("Attempt")
+plt.ylabel("Vertexing error")
+#plt.title("Vertexing error")
+plt.yscale('log')
+plt.savefig("RL_oldtree_poca_displacement.png")
+plt.close()
+
+
+plt.hist(ntracks_used)
+#plt.title("Number of tracks used")
+plt.xlabel("Number of tracks used")
+plt.ylabel("Attempts")
 plt.savefig("RL_oldtree_ntracks.png")
 plt.close()
 
 plt.plot(episode_lengths)
-plt.title("Actions in an episode")
+#plt.title("Actions in an episode")
+plt.xlabel("Episode")
+plt.ylabel("Actions")
 plt.savefig("RL_oldtree_epilength.png")
 plt.close()
 
 plt.plot(av_test_ntracks_used)
-plt.xlabel("epoch")
+plt.xlabel("Epoch")
 plt.ylabel(r"# tracks used")
 plt.savefig("RL_oldtree_test_ntracks.png")
 plt.close()
 
 plt.plot(av_test_poca_dist)
-plt.xlabel("epoch")
+plt.xlabel("Epoch")
 plt.ylabel("Av vertex displacement")
-plt.ylabel(r"vertex displacement")
 plt.savefig("RL_oldtree_test_displacement.png")
 plt.close()
-    
+
+plt.scatter(range(len(rewards)), rewards)
+plt.xlabel("Step")
+plt.ylabel("Reward")
+plt.savefig("RL_oldtree_test_rewards.png")
+plt.close()
 
 print(counter)
 print(len(memory))
