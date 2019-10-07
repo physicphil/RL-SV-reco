@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 
-r = 833.91024
+r = 833.91024 * 3.8/4
 pdis_init = 5
 
 N = 30
@@ -180,7 +180,6 @@ def findvertex_rp(tstart0, tend0, tstart1, tend1,
     ind_sort_x_1, ind_sort_y_1 = (x_no_duplicates[:points_n],
                                   y_no_duplicates[:points_n])
 
-    
     poca_min = np.sqrt(ds[ind_sort_x_1[0],ind_sort_y_1[0]])
     
     t0 = rp0[ind_sort_x_0[0]]
@@ -369,6 +368,7 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
 def get_helix_params(i, X):
     """Returns the helix paramters in relevant order for vertexing.
     
+    'pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pv_x', 'pv_y', 'pv_z', 'theta', 'chi2'
     Input are the track index and a jet (collection of tracks)
     The ith PFC entry is taken and reordered to match the vertexing
     input. Another function can use this to create all arguments needed
@@ -376,10 +376,15 @@ def get_helix_params(i, X):
     
     This function must be changed in order to handle new input types."""
 
-#['pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pvIndex', 'pdgId']#, 'chi2', pvx, pvy, pvz needed!!!
-#  0       1    2       3         4      5     6            7
+#['pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pv_x', 'pv_y', 'pv_z', 
+#  0      1       2     3         4      5     6        7      8
+#           'theta', 'chi2', 'normalizedChi2','ndof', 'nPixelHits'
+#               9      10        11             12      13 
+#           'ptError', 'etaError', 'phiError',  'dxyError', 'dzError']
+#               14         15          16           17         18
+
     x0, x1, x2, x3, x4, x5 = X[i,:6]
-    x6, x7, x8 = X[i, 8:11]
+    x6, x7, x8, x9, x10 = X[i, 6:11]
     # , x9, x10, x11, x12, x13
     phi = float(x2)
     eta = float(x1)
@@ -390,8 +395,13 @@ def get_helix_params(i, X):
     pvx = float(x6) #x6
     pvy = float(x7) #x7
     pvz = float(x8) #x8
-    chi2 = 1
+    chi2 = float(x10)
     return phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2
+    
+def get_track_qualities(i, X):
+    """Returns nPixelHits, and errors on helix parameters"""
+    
+    return 0
     
 def helix_by_index(t, i, X):
     phi, eta, q, pt, dxy, dz, pvx, pvy, pvz, chi2 = get_helix_params(i, X)
@@ -417,6 +427,7 @@ def straight_line_intersect(phi0, eta0, q0, pt0, dxy0, dz0,
     p0 = np.array([]) # fixed point of line 0
     d1 = np.array([]) # directional vector of line 1
     p1 = np.array([]) # fixed point of line 1
+    n = 0 #  unit vector perpendicular to d0 and d1 (right handed)
     
     return None
 
@@ -448,10 +459,10 @@ def helices_plot(X, tracks, legend=True, barrel=False, num_points=200,
                 [i[2] for i in points],label=f"track {i}")
     # plot pocas
     for poca in pocas:
+        p = poca.x
         track = poca.track
         near = poca.next_to
-        poca = poca.x
-        ax.scatter(poca[0], poca[1], poca[2], label=f"poca{track}{near}")
+        ax.scatter(p[0], p[1], p[2], label=f"poca{track}{near}")
     # plot barrel if turned on
     if barrel :
         x=np.linspace(-110, 110, 100)
@@ -460,7 +471,17 @@ def helices_plot(X, tracks, legend=True, barrel=False, num_points=200,
         Yc = np.sqrt(110**2-(Xc)**2)
         ax.plot_surface(Xc,-Yc, Zc, alpha=0.2, color='g',rstride=20, cstride=10)
         ax.plot_surface(Xc, Yc, Zc, alpha=0.2, color='g',rstride=20, cstride=10)
+    
+    if type(true_vertex) == np.ndarray:
+        ax.scatter(true_vertex[0], true_vertex[1], true_vertex[2],
+                   label="true SV")
+
+    if type(reco_vertex) == np.ndarray:
+        ax.scatter(reco_vertex[0], reco_vertex[1], reco_vertex[2],
+                   label="reco SV")
+    
     if legend:
         ax.legend()
+    ax.text2D(0.01,0.9, textstr, transform=ax.transAxes)
     
     return fig, ax
