@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 
-r = 833.91024 * 3.8/4
+# cm/mm
+r = 83.391024 * 4/3.8
 pdis_init = 5
 
 N = 30
@@ -37,7 +38,7 @@ def helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
 
     return np.array([x, y, z]) 
 
-
+# adjust this with forward detectors?
 def isinbarrel(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
     """Checks if a point on defined helix is still in the pixel barrel.
 
@@ -46,9 +47,20 @@ def isinbarrel(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
     """
 
     x = helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
+    # cm/mm
+    return (((x[0]**2 + x[1]**2) < 11**2) and (abs(x[2]) < 27.5))
 
-    return (((x[0]**2 + x[1]**2) < 110**2) and (abs(x[2]) < 275))
 
+def isbeforelayer(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
+    """Checks if a point on defined helix is still befor pixel layer.
+
+    Uses CMS coordinates and primary vertex coordinates to determine if
+    point parametrized by t and helix parameters is inside pixel barrel.
+    """
+    
+    x = helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
+    # cm/mm
+    return (((x[0]**2 + x[1]**2) < 42**2) and (abs(x[2]) < 275))
 
 def pointdistance(stepwidth, phi, eta, q, pt, dxy, dz):
     """Returns space stepwidth for points after one running parameter step.
@@ -339,7 +351,8 @@ def vertexing_no_error_adaptive(phi0, eta0, q0, pt0, dxy0, dz0,
     pdis_1 = pointdistance((tend1-tstart1)/float(N),phi1, eta1, q1, pt1, dxy1, dz1)
     pdis_max = max(pdis_0, pdis_1)
     counter = 0
-    while pdis_max > 0.001:
+    # cm/mm
+    while pdis_max > 0.0001:
         #------catch events that take too long---------
         if counter > 25:
             #broken_minimisation.append(jentry)
@@ -445,9 +458,10 @@ def helices_plot(X, tracks, legend=True, barrel=False, num_points=200,
     """
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    ax.set_xlabel("X (mm)")
-    ax.set_ylabel("Y (mm)")
-    ax.set_zlabel("Z (mm)")
+    # cm/mm
+    ax.set_xlabel("X (cm)")
+    ax.set_ylabel("Y (cm)")
+    ax.set_zlabel("Z (cm)")
     for i in tracks:
         phi, eta, q, pt, dxy, dz, pvx, pvy, pvz,_ = get_helix_params(i, X)
         tstepwidth = optstepwidth(pdis_init, phi, eta, q, pt, dxy, dz)
@@ -465,10 +479,10 @@ def helices_plot(X, tracks, legend=True, barrel=False, num_points=200,
         ax.scatter(p[0], p[1], p[2], label=f"poca{track}{near}")
     # plot barrel if turned on
     if barrel :
-        x=np.linspace(-110, 110, 100)
-        z=np.linspace(-275, 275, 100)
+        x=np.linspace(-11, 11, 100)
+        z=np.linspace(-27.5, 27.5, 100)
         Xc, Zc=np.meshgrid(x, z)
-        Yc = np.sqrt(110**2-(Xc)**2)
+        Yc = np.sqrt(11**2-(Xc)**2)
         ax.plot_surface(Xc,-Yc, Zc, alpha=0.2, color='g',rstride=20, cstride=10)
         ax.plot_surface(Xc, Yc, Zc, alpha=0.2, color='g',rstride=20, cstride=10)
     

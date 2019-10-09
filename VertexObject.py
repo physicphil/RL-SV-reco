@@ -125,7 +125,7 @@ class VertexCandidate(object):
             return self.x, self.uncertainty, self.num_steps, False
         '''
         self.num_steps += 1
-        if i not in self.track_indices:
+        if i not in self.track_indices or len(self.track_indices) < 3:
             return self.x, self.uncertainty, self.num_steps, True
         # check if track was already added. If not -> penalty
         self.track_indices.remove(i)
@@ -178,12 +178,14 @@ class TrackEnvironment(object):
         self.has_sv = True #jet.sv_flag
         # also include nPixelHits, theta for learning etc.
         self.track_data = torch.tensor(jet,dtype=torch.float) # with a gather or where? # padding (done in input)
+        # here things can be varied to change the data included
+        track_variable_mask = torch.tensor([0,3,4,5,6,7,8,14,15])
+        needed_track_data = self.track_data[:, track_variable_mask]
         states = torch.zeros((self.track_data.shape[0],1))
-        self.state = torch.cat((self.track_data, states), 1)# add a dimension or column with 0
+        self.state = torch.cat((needed_track_data, states), 1)# add a dimension or column with 0
         self.vertex = VertexCandidate(0, self.state)
         self.n = self.state.shape[0]
-        #self.take_action(1)
-
+        self.take_action(1)
   
     def take_action(self, a):
         """ There are 2n + 1 actions: add track 0 to n-1, remove track
@@ -195,11 +197,11 @@ class TrackEnvironment(object):
         # dflag: done flag, when agent select stop action this is set to true
         vertex, uncer, numsteps, pflag, dflag = -1, -1, -1, -1, False
         if a < self.n:
-            vertex, uncer, numsteps, pflag = self.vertex.add_track(a, self.state)
+            vertex, uncer, numsteps, pflag = self.vertex.add_track(a, self.track_data)
             if not pflag:
                 self.state[a, -1] = 1
         elif a < 2*self.n:
-            vertex, uncer, numsteps, pflag = self.vertex.rm_track(a-self.n, self.state)
+            vertex, uncer, numsteps, pflag = self.vertex.rm_track(a-self.n, self.track_data)
             if not pflag:
                 self.state[a-self.n, -1] = 0
         elif a == 2*self.n:
