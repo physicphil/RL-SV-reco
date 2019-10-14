@@ -40,7 +40,7 @@ class VertexCandidate(object):
     If only one track is included, None is stored as position.
     This needs to be remembered for the reward function!
     """
-    def __init__(self, i, state):
+    def __init__(self, i, track_data, state):
         """ Initialises the vertex object with one track
         
         No position is initially returned.
@@ -57,9 +57,9 @@ class VertexCandidate(object):
         self.uncertainty = None # measure of spread of pocas
         self.num_steps = 0 # how many steps have been done by the agent
         self.pocas = [] # list of Poca objects
-        state[i, -1] = 1
+        state[0,0, i, -1] = 1
         
-    def add_track(self, i, state):
+    def add_track(self, i, track_data, state):
         """Adds a track to the vertex candidate.
         
         The pocas to all other tracks are computed and the weighted
@@ -71,16 +71,17 @@ class VertexCandidate(object):
         """
         self.num_steps += 1
         # if track was already added or is from 0 padding, do nothing and give a penalty
-        if i in self.track_indices or state[i, 0] == 0:
+        #                              pt == 0?
+        if i in self.track_indices or track_data[i, 0] == 0:
             return self.x, self.uncertainty, self.num_steps, True
         # check if track is from zero padding, if so, do the same as with an
         # already added track.
         
         # compute pocas to all other already added tracks
         for j in self.track_indices:
-            t_i, t_j, poca_sep, iter_counter = I.vertexing_by_index(i, j, state)
-            self.pocas.append(Poca(i, t_i, j, state))
-            self.pocas.append(Poca(j, t_j, i, state))
+            t_i, t_j, poca_sep, iter_counter = I.vertexing_by_index(i, j, track_data)
+            self.pocas.append(Poca(i, t_i, j, track_data))
+            self.pocas.append(Poca(j, t_j, i, track_data))
             #self.pocas.append(Poca(i, 0, j, state))
             #self.pocas.append(Poca(j, 0, i, state))
         
@@ -91,7 +92,7 @@ class VertexCandidate(object):
         self.uncertainty = self.calc_uncertainty()
         return self.x, self.uncertainty, self.num_steps, False
 
-    def rm_track(self, i, state):
+    def rm_track(self, i, track_data, state):
         """A track is removed from vertex candidate.
         
         This track must have been added before.
@@ -178,13 +179,13 @@ class TrackEnvironment(object):
         self.has_sv = True #jet.sv_flag
         # also include nPixelHits, theta for learning etc.
         self.track_data = torch.tensor(jet,dtype=torch.float) # with a gather or where? # padding (done in input)
+        self.n = self.track_data.shape[0]
         # here things can be varied to change the data included
         track_variable_mask = torch.tensor([0,3,4,5,6,7,8,14,15])
         needed_track_data = self.track_data[:, track_variable_mask]
         states = torch.zeros((self.track_data.shape[0],1))
-        self.state = torch.cat((needed_track_data, states), 1)# add a dimension or column with 0
-        self.vertex = VertexCandidate(0, self.state)
-        self.n = self.state.shape[0]
+        self.state = torch.cat((needed_track_data, states), 1).unsqueeze(0).unsqueeze(0)# add a dimension or column with 0
+        self.vertex = VertexCandidate(0, self.track_data,self.state)
         self.take_action(1)
   
     def take_action(self, a):
@@ -197,13 +198,13 @@ class TrackEnvironment(object):
         # dflag: done flag, when agent select stop action this is set to true
         vertex, uncer, numsteps, pflag, dflag = -1, -1, -1, -1, False
         if a < self.n:
-            vertex, uncer, numsteps, pflag = self.vertex.add_track(a, self.track_data)
+            vertex, uncer, numsteps, pflag = self.vertex.add_track(a, self.track_data, self.state)
             if not pflag:
-                self.state[a, -1] = 1
+                self.state[0,0,a, -1] = 1
         elif a < 2*self.n:
-            vertex, uncer, numsteps, pflag = self.vertex.rm_track(a-self.n, self.track_data)
+            vertex, uncer, numsteps, pflag = self.vertex.rm_track(a-self.n, self.track_data, self.state)
             if not pflag:
-                self.state[a-self.n, -1] = 0
+                self.state[0,0,a-self.n, -1] = 0
         elif a == 2*self.n:
             vertex, uncer, numsteps, pflag = self.vertex.vertex_stop()
             dflag = True
