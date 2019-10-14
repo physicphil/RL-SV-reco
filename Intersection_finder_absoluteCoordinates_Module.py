@@ -48,7 +48,7 @@ def isinbarrel(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
 
     x = helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
     # cm/mm
-    return (((x[0]**2 + x[1]**2) < 11**2) and (abs(x[2]) < 27.5))
+    return (((x[0]**2 + x[1]**2) < 25**2) and (abs(x[2]) < 50))
 
 
 def isbeforelayer(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz):
@@ -497,5 +497,57 @@ def helices_plot(X, tracks, legend=True, barrel=False, num_points=200,
     if legend:
         ax.legend()
     ax.text2D(0.01,0.9, textstr, transform=ax.transAxes)
+    
+    return fig, ax
+    
+def helices_plot_xy(X, tracks, legend=True, barrel=False, num_points=200,
+                 pocas=[], textstr = '', true_vertex=None,
+                 reco_vertex=None):
+    """ Plots all helices provided as a tensor of helix parameters.
+    
+    Takes an input multiple sets as helix parameters. With barrel the 
+    boundaries of the barrel can be plotted.
+    A list of lists of running parameters can be passed to plot the
+    points of closest approach for each track.
+    Also the reco and true verteices can be passed to be plotted.
+    """
+    fig = plt.figure()
+    ax = fig.add_axes()
+    # cm/mm
+    ax.set_xlabel("X (cm)")
+    ax.set_ylabel("Y (cm)")
+    for i in tracks:
+        phi, eta, q, pt, dxy, dz, pvx, pvy, pvz,_ = get_helix_params(i, X)
+        tstepwidth = optstepwidth(pdis_init, phi, eta, q, pt, dxy, dz)
+        tstart, tend = scanrange(tstepwidth, phi, eta, q, pt, dxy, dz,
+                                 pvx, pvy, pvz)
+        points = [helix(t, phi, eta, q, pt, dxy, dz, pvx, pvy, pvz)
+                for t in np.linspace(tstart, tend, num_points)]
+        ax.plot([i[0] for i in points], [i[1] for i in points],
+                label=f"track {i}")
+    # plot pocas
+    for poca in pocas:
+        p = poca.x
+        track = poca.track
+        near = poca.next_to
+        ax.scatter(p[0], p[1], label=f"poca{track}{near}")
+    # plot barrel if turned on
+    if barrel :
+        Xc=np.linspace(-11, 11, 100)
+        Yc = np.sqrt(11**2-(Xc)**2)
+        ax.plot_(Xc,-Yc, alpha=0.2, color='g',rstride=20, cstride=10)
+        ax.plot(Xc, Yc, alpha=0.2, color='g',rstride=20, cstride=10)
+    
+    if type(true_vertex) == np.ndarray:
+        ax.scatter(true_vertex[0], true_vertex[1],
+                   label="true SV")
+
+    if type(reco_vertex) == np.ndarray:
+        ax.scatter(reco_vertex[0], reco_vertex[1],
+                   label="reco SV")
+    
+    if legend:
+        ax.legend()
+    ax.text(0.01,0.9, textstr, transform=ax.transAxes)
     
     return fig, ax
