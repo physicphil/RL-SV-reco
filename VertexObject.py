@@ -14,6 +14,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 
+from sklearn.preprocessing import StandardScaler
+
 import Intersection_finder_absoluteCoordinates_Module as I
 
 class Poca(object):
@@ -76,7 +78,8 @@ class VertexCandidate(object):
             return self.x, self.uncertainty, self.num_steps, True
         # check if track is from zero padding, if so, do the same as with an
         # already added track.
-        
+        if state[0,0,i,-1] == 1:
+            print("Vertex bookkeeping broken!!!!")
         # compute pocas to all other already added tracks
         for j in self.track_indices:
             t_i, t_j, poca_sep, iter_counter = I.vertexing_by_index(i, j, track_data)
@@ -171,7 +174,7 @@ class TrackEnvironment(object):
     """Track environment containing all valid tracks.
     Another dimension keeps track of which tracks have been added.
     """
-    def __init__(self, jet):
+    def __init__(self, jet, scaler=None, para_list=[0,3,4,5,6,7,8,9,13,14,15], soft_start=False):
         """Make a tensor of all valid track parameters (pT > 1GeV).
         Add dim to flag all added tracks.
         Zero flag to match input dimension of policy net.
@@ -180,13 +183,29 @@ class TrackEnvironment(object):
         # also include nPixelHits, theta for learning etc.
         self.track_data = torch.tensor(jet,dtype=torch.float) # with a gather or where? # padding (done in input)
         self.n = self.track_data.shape[0]
+        self.n_valid_tracks = self.num_valid_tracks()
+        data = jet
+        # if a scaler is provided, scale the jet data, then convert to tensor
+        dummies = np.zeros(max(data.shape[1], 17))
+        dummies[[0,1,2,3,4,5,6,7,8]] = -5, -4, -2, -2, -5,-10,-10, -10, -10
+        dummies[[9,10,11,12,13,14,15,16]] = -5, -1, -1,-1, -2, -10, -5, -5
+        if type(scaler) == StandardScaler:
+            for track in data:
+                if track[0] >= 1:
+                    track = scaler.transform([track])
+                else:
+                    track = dummies[:data.shape[1]]
+        data = torch.tensor(data, dtype=torch.float)
         # here things can be varied to change the data included
-        track_variable_mask = torch.tensor([0,3,4,5,6,7,8,14,15])
-        needed_track_data = self.track_data[:, track_variable_mask]
+        self.track_variable_mask = torch.tensor(para_list)
+        needed_track_data = data[:, self.track_variable_mask]
         states = torch.zeros((self.track_data.shape[0],1))
         self.state = torch.cat((needed_track_data, states), 1).unsqueeze(0).unsqueeze(0)# add a dimension or column with 0
         self.vertex = VertexCandidate(0, self.track_data,self.state)
         self.take_action(1)
+        if soft_start:
+            self.vertex = VertexCandidate(self.n_valid_tracks-1, self.track_data,self.state)
+            self.take_action(self.n_valid_tracks-2)
   
     def take_action(self, a):
         """ There are 2n + 1 actions: add track 0 to n-1, remove track
@@ -213,4 +232,26 @@ class TrackEnvironment(object):
         #      next state  reward   reward  reward   penalty  done
         return self.state, vertex , uncer, numsteps, pflag, dflag
         
-
+    def num_valid_tracks(self):
+        for i in range(self.track_data.shape[0]):
+            if self.track_data[i,0] == 0:
+                if i > 1:
+                   return i
+        return self.n
+        
+# PFCatts = 'pt', 'eta', 'phi', 'charge', 'dxy', 'dz', 'pv_x', 'pv_y', 'pv_z',
+# 
+#             0     1     2        3          4    5    6         7       8 
+#             
+#            'theta', 'chi2', 'normalizedChi2','ndof', 'nPixelHits', 'deltaEta',
+#            
+#               9        10            11         12       13            14
+#               
+#            'deltaPhi', 'jetPtFrac', 
+#            
+#                 15            16 
+#                 
+#            'ptError', 'etaError', 'phiError',  'dxyError', 'dzError'
+#            
+#                17          18            19         20         21
+# 
