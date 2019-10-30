@@ -511,11 +511,13 @@ def helices_plot_xy(X, tracks, legend=True, barrel=False, num_points=200,
     points of closest approach for each track.
     Also the reco and true verteices can be passed to be plotted.
     """
-    fig = plt.figure()
-    ax = fig.add_axes()
+    fig = plt.figure(figsize=(5,5), frameon=False)
+    ax = fig.gca()
     # cm/mm
     ax.set_xlabel("X (cm)")
     ax.set_ylabel("Y (cm)")
+    ax.set_xlim((-20,20))
+    ax.set_ylim((-20,20))
     for i in tracks:
         phi, eta, q, pt, dxy, dz, pvx, pvy, pvz,_ = get_helix_params(i, X)
         tstepwidth = optstepwidth(pdis_init, phi, eta, q, pt, dxy, dz)
@@ -530,24 +532,24 @@ def helices_plot_xy(X, tracks, legend=True, barrel=False, num_points=200,
         p = poca.x
         track = poca.track
         near = poca.next_to
-        ax.scatter(p[0], p[1], label=f"poca{track}{near}")
+        ax.scatter(p[0], p[1], marker='.',s=35, label=f"poca{track}{near}")
     # plot barrel if turned on
     if barrel :
         Xc=np.linspace(-11, 11, 100)
         Yc = np.sqrt(11**2-(Xc)**2)
-        ax.plot_(Xc,-Yc, alpha=0.2, color='g',rstride=20, cstride=10)
-        ax.plot(Xc, Yc, alpha=0.2, color='g',rstride=20, cstride=10)
+        ax.plot(Xc,-Yc, alpha=0.4, color='g')
+        ax.plot(Xc, Yc, alpha=0.4, color='g')
     
     if type(true_vertex) == np.ndarray:
-        ax.scatter(true_vertex[0], true_vertex[1],
+        ax.scatter(true_vertex[0], true_vertex[1],marker='.',s=35,c='g',
                    label="true SV")
 
     if type(reco_vertex) == np.ndarray:
-        ax.scatter(reco_vertex[0], reco_vertex[1],
+        ax.scatter(reco_vertex[0], reco_vertex[1],marker='.',s=35,c='r',
                    label="reco SV")
     
     if legend:
         ax.legend()
-    ax.text(0.01,0.9, textstr, transform=ax.transAxes)
+    ax.text(0.02,0.04, textstr, transform=ax.transAxes)
     
     return fig, ax
